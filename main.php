@@ -169,7 +169,7 @@ require $blogpath . 'zb_system/admin/admin_top.php';
           <td>保留原图</td>
           <td>
             <label><input type="checkbox" name="keep_original" value="1"<?php echo AutoWebP_Checked($cfg['keep_original']); ?>> 保留并另存原图（同名不同扩展名）</label>
-            <div class="note">勾选：原图另存到同目录，文章引用 WebP；不勾选：仅保留 WebP。批量转换始终保留原文件，避免旧文章链接失效。</div>
+            <div class="note">勾选：原图另存到同目录，文章引用 WebP；不勾选：不勾选将删除原图</div>
           </td>
         </tr>
         <tr>
