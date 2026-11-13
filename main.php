@@ -44,7 +44,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['autowebp_save'])) {
     }
     AutoWebP_SaveConfig(array(
         'enable' => isset($_POST['enable']) ? 1 : 0,
-        'quality' => isset($_POST['quality']) ? max(0, min(100, (int) $_POST['quality'])) : 82,
+        // 留空按默认 82 处理，避免 (int)'' 落到 0（最低画质）
+        'quality' => isset($_POST['quality']) && $_POST['quality'] !== '' ? max(0, min(100, (int) $_POST['quality'])) : 82,
+        // 留空与填 0 语义一致：不缩放
         'max_edge' => isset($_POST['max_edge']) ? max(0, (int) $_POST['max_edge']) : 0,
         'keep_original' => isset($_POST['keep_original']) ? 1 : 0,
     ));
@@ -120,14 +122,14 @@ require $blogpath . 'zb_system/admin/admin_top.php';
           <td>压缩质量</td>
           <td>
             <input type="number" name="quality" min="0" max="100" step="1" value="<?php echo AutoWebP_H($cfg['quality']); ?>" style="width:80px;">
-            <span class="note">0-100，建议 75-85；数值越大画质越好、体积越大。</span>
+            <span class="note">0-100，建议 75-85；数值越大画质越好、体积越大。留空按默认 82 处理；填 0 为最低画质，慎用。</span>
           </td>
         </tr>
         <tr>
           <td>缩放</td>
           <td>
             最长边不超过 <input type="number" name="max_edge" min="0" max="20000" step="1" value="<?php echo AutoWebP_H($cfg['max_edge']); ?>" style="width:90px;"> 像素
-            <div class="note">填 0 表示不缩放；超过限制时等比缩小，不放大。</div>
+            <div class="note">填 0 或留空均表示不缩放；超过限制时等比缩小，不放大。</div>
           </td>
         </tr>
         <tr>
@@ -150,7 +152,7 @@ require $blogpath . 'zb_system/admin/admin_top.php';
       <div style="font-size:13px;color:#333;font-weight:bold;margin-bottom:4px;">关于本插件</div>
       作者：青春记忆<br>
       作者网站：<a href="https://www.qchun.com" target="_blank" rel="noopener noreferrer" style="color:#2a6fbd;text-decoration:none;">https://www.qchun.com</a><br>
-      <span style="color:#999;">图片自动转 WebP v1.1.0</span>
+      <span style="color:#999;">图片自动转 WebP v1.1.1</span>
     </div>
 
     <script type="text/javascript">ActiveLeftMenu("aPluginMng");</script>
