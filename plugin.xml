@@ -4,7 +4,7 @@
   <name>图片自动转 WebP</name>
   <url>https://docs.zblogcn.com/php/dev-plugin</url>
   <note>上传图片自动转 WebP，只用质量与缩放两个设置</note>
-  <description>上传 JPG/PNG/GIF/BMP 图片时自动转换为 WebP。Imagick 优先、GD 兜底，自动纠正 EXIF 方向并保留透明通道；转换失败或环境不支持时按原图正常入库，不影响上传。</description>
+  <description>上传 JPG/PNG/GIF/BMP 图片时自动转换为 WebP。使用 GD 转换，自定义保留原图；转换失败或环境不支持时按原图正常入库，不影响上传。</description>
   <path>main.php</path>
   <include>include.php</include>
   <level>1</level>
