@@ -1,0 +1,46 @@
+name: Build & Release ZBA
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Pack ZBA
+        id: pack
+        uses: wdssmq/zbp-app-pack@v1
+        with:
+          path: '.'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ steps.pack.outputs.zba-path }}
+          name: ${{ steps.pack.outputs.app-name }} v${{ steps.pack.outputs.app-version }}
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ### 📦 应用信息
+            - **应用 ID**：`${{ steps.pack.outputs.app-id }}`
+            - **应用类型**：`${{ steps.pack.outputs.app-type }}`
+            - **版本号**：`${{ steps.pack.outputs.app-version }}`
+            - **最后修改**：`${{ steps.pack.outputs.app-modified }}`
+            - **安装包**：`${{ steps.pack.outputs.zba-name }}`
+
