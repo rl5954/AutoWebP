@@ -2,7 +2,7 @@
 <plugin version="php">
   <id>AutoWebP</id>
   <name>图片自动转 WebP</name>
-  <url>https://docs.zblogcn.com/php/dev-plugin</url>
+  <url></url>
   <note>上传图片自动转 WebP，只用质量与缩放两个设置</note>
   <description>上传 JPG/PNG/GIF/BMP 图片时自动转换为 WebP。使用 GD 转换，自定义保留原图；转换失败或环境不支持时按原图正常入库，不影响上传。</description>
   <path>main.php</path>
