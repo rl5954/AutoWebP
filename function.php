@@ -97,6 +97,42 @@ function AutoWebP_InitConfig()
 }
 
 /**
+ * 1.1.0 之前版本遗留、现已废弃的配置键（engine/cwebp/批量/日志/跳过条件等）。
+ *
+ * @return array
+ */
+function AutoWebP_DeprecatedKeys()
+{
+    return array(
+        'engine', 'cwebp_path', 'on_fail', 'del_config', 'format',
+        'resize_enable', 'max_width', 'max_height',
+        'skip_small_kb', 'skip_webp', 'skip_gif',
+        'log_enable', 'batch_last_id',
+    );
+}
+
+/**
+ * 清理历史版本遗留的废弃配置键（幂等：键不存在时无任何写入）。
+ *
+ * 由 InstallPlugin 在安装/升级时调用，老站点的死键会被清掉。
+ */
+function AutoWebP_CleanLegacyConfig()
+{
+    global $zbp;
+
+    $changed = false;
+    foreach (AutoWebP_DeprecatedKeys() as $key) {
+        if ($zbp->Config('AutoWebP')->HasKey($key)) {
+            $zbp->Config('AutoWebP')->Del($key);
+            $changed = true;
+        }
+    }
+    if ($changed) {
+        $zbp->SaveConfig('AutoWebP');
+    }
+}
+
+/**
  * 记录最近一次异常信息，供后台设置页「最近一次异常」展示。
  *
  * 仅在内容变化时写盘，避免每次上传都产生配置文件写入。
@@ -119,21 +155,15 @@ function AutoWebP_SetLastError($message)
  * 给当前钩子回调设置 PLUGIN_EXITSIGNAL_RETURN 信号，
  * 让系统跳过后续的默认保存动作（目录创建、扩展名检查、move_uploaded_file）。
  *
- * 兼容处理：1.7+ 提供 SetPluginSignal()；旧版本直接改 $GLOBALS['hooks']。
+ * 仅在 Z-BlogPHP 1.7.0+ 环境下会被调用（HandleUpload 有版本门槛）：
+ * 信号机制（SetPluginSignal）自 1.7 引入，无需兼容分支。
  *
  * @param string $hook 钩子名
  * @param string $func 当前回调函数名
  */
 function AutoWebP_SetReturnSignal($hook, $func)
 {
-    if (function_exists('SetPluginSignal')) {
-        SetPluginSignal($hook, $func, PLUGIN_EXITSIGNAL_RETURN);
-
-        return;
-    }
-    if (isset($GLOBALS['hooks'][$hook][$func])) {
-        $GLOBALS['hooks'][$hook][$func] = PLUGIN_EXITSIGNAL_RETURN;
-    }
+    SetPluginSignal($hook, $func, PLUGIN_EXITSIGNAL_RETURN);
 }
 
 /* --------------------------------------------------------------------------
@@ -199,15 +229,25 @@ function AutoWebP_Detect($path)
  * 通过统计图形控制扩展块（0x21 0xF9 0x04）数量判断：多帧动图该块会重复出现。
  * 动图转 WebP 只能保留第一帧，调用方应据此直接跳过。
  *
+ * 只读文件头部 64KB：图形控制扩展块集中在前部（首帧 + 控制序列），
+ * 足以识别绝大多数动图，避免大文件全量读入内存；
+ * 极端情况下（前 64KB 仅含单帧的巨型多帧图）会误判为静图，
+ * 后续转换只取第一帧，不影响正确性。
+ *
  * @param string $path
  *
  * @return bool
  */
 function AutoWebP_IsAnimatedGif($path)
 {
-    $data = @file_get_contents($path);
+    $fh = @fopen($path, 'rb');
+    if ($fh === false) {
+        return false;
+    }
+    $data = (string) @fread($fh, 65536);
+    @fclose($fh);
 
-    return $data !== false && substr_count($data, "\x21\xF9\x04") > 1;
+    return substr_count($data, "\x21\xF9\x04") > 1;
 }
 
 /**
@@ -680,8 +720,9 @@ function AutoWebP_Upload_SaveBase64File($str64, &$upload)
  *
  * 处理顺序说明：
  * 1. 原图必须在转换之前复制落盘，不依赖转换结果；
- * 2. 转换失败时删除已复制的原图及附件记录，回退为系统默认保存原图；
- * 3. 转换成功时改写 $upload 的文件名/类型/大小，并设置返回信号接管保存。
+ * 2. 转换后做纯收益检查，WebP 不小于原图时放弃转换；
+ * 3. 转换失败时删除已复制的原图及附件记录，回退为系统默认保存原图；
+ * 4. 转换成功时改写 $upload 的文件名/类型/大小，并设置返回信号接管保存。
  *
  * @param Upload $upload     附件对象
  * @param string $tmp        源图片的临时文件路径
@@ -692,6 +733,12 @@ function AutoWebP_Upload_SaveBase64File($str64, &$upload)
 function AutoWebP_HandleUpload(&$upload, $tmp, $fromBase64)
 {
     global $zbp;
+
+    // 版本门槛：接管保存依赖 1.7.0+ 的信号机制，更低版本直接不处理，
+    // 系统按原图保存，用户可从「没有生成 WebP」一眼看出插件未生效
+    if (!defined('ZBP_VERSION') || version_compare(ZBP_VERSION, '1.7.0', '<')) {
+        return true;
+    }
 
     // 开关关闭或临时文件不可用时，不处理
     $cfg = AutoWebP_GetConfig();
@@ -739,7 +786,20 @@ function AutoWebP_HandleUpload(&$upload, $tmp, $fromBase64)
 
         return true;
     }
+
+    // 纯收益检查：WebP 不比原图小就放弃转换
+    // （5KB 级小图标转 WebP 经常反而变大，此时保存原图更划算）
+    $failReason = '';
     $ok = AutoWebP_Convert($tmp, $webpTmp, $info, $cfg['quality'], $cfg['max_edge']);
+    if ($ok) {
+        $webpSize = (int) @filesize($webpTmp);
+        $origSize = (int) @filesize($tmp);
+        if ($webpSize <= 0 || $webpSize >= $origSize) {
+            $ok = false;
+            $failReason = '转换后体积未减小（WebP ' . $webpSize . 'B / 原图 ' . $origSize . 'B）';
+        }
+    }
+
     $newName = AutoWebP_UniqueName($dir, $base, 'webp');
     if (!$ok || !AutoWebP_CopyFile($webpTmp, $dir . $newName)) {
         @unlink($webpTmp);
@@ -753,7 +813,7 @@ function AutoWebP_HandleUpload(&$upload, $tmp, $fromBase64)
                 }
             }
         }
-        AutoWebP_SetLastError('WebP 转换或写入失败，已按原图保存：' . $upload->Name);
+        AutoWebP_SetLastError(($failReason !== '' ? $failReason . '，' : 'WebP 转换或写入失败，') . '已按原图保存：' . $upload->Name);
 
         return true;
     }
