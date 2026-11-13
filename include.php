@@ -36,9 +36,11 @@ function ActivePlugin_AutoWebP()
 }
 
 /**
- * 启用插件：初始化配置（可重复执行，只补缺失项，不覆盖已有设置）。
+ * 启用/安装插件：初始化配置，并清理历史版本遗留的废弃配置键
+ * （Del 幂等，重复执行无副作用）。
  */
 function InstallPlugin_AutoWebP()
 {
     AutoWebP_InitConfig();
+    AutoWebP_CleanLegacyConfig();
 }
